@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global CRM Admin - Multi-Year Support</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .active-nav { @apply bg-blue-600 text-white !important; }
+        .inactive-nav { @apply hover:bg-slate-800 text-slate-400 hover:text-white !important; }
+        .modal-active { display: flex !important; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+    <div id="app" class="flex min-h-screen relative">
+        <!-- Toast Notification -->
+        <div id="toast" class="fixed bottom-5 right-5 z-[110] bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300"></div>
+
+        <!-- Sidebar -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white p-6 shadow-xl z-50 transform -translate-x-full transition-transform duration-300 lg:relative lg:translate-x-0">
+            <div class="flex items-center justify-between mb-10 px-2">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-blue-500 rounded-lg">
+                        <i data-lucide="globe" class="w-6 h-6 text-white"></i>
+                    </div>
+                    <span class="text-xl font-bold tracking-tight">Global CRM</span>
+                </div>
+            </div>
+            
+            <nav class="space-y-2 flex-1" id="mainNav">
+                <button onclick="changeView('dashboard')" id="nav-dashboard" class="nav-item flex items-center gap-3 w-full p-3 rounded-xl active-nav font-medium transition-all">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i> 대시보드
+                </button>
+                <button onclick="changeView('management')" id="nav-management" class="nav-item flex items-center gap-3 w-full p-3 rounded-xl inactive-nav transition-all">
+                    <i data-lucide="users" class="w-5 h-5"></i> 거래처 관리
+                </button>
+                <button onclick="changeView('analysis')" id="nav-analysis" class="nav-item flex items-center gap-3 w-full p-3 rounded-xl inactive-nav transition-all">
+                    <i data-lucide="trending-up" class="w-5 h-5"></i> 매출 분석
+                </button>
+            </nav>
+
+            <div class="mt-10 p-4 bg-slate-800 rounded-2xl">
+                <p class="text-xs text-slate-400 mb-1">시스템 상태</p>
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span class="text-sm font-medium">관리자 모드 세션 활성</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 w-full overflow-x-hidden p-4 md:p-8">
+            <!-- Global Header -->
+            <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div class="flex items-center gap-4">
+                    <div>
+                        <h1 id="viewTitle" class="text-2xl font-bold text-slate-800">해외거래선 통합 관리</h1>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-slate-500 text-sm">기준 연도:</span>
+                            <select id="yearSelect" onchange="handleYearChange(this.value)" class="bg-white border border-slate-200 rounded-lg text-sm font-bold px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-500">
+                                <!-- Years will be populated by JS -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
+                        <span class="text-xs font-bold text-slate-500 uppercase">Admin Mode</span>
+                        <button id="adminToggle" onclick="toggleAdminMode()" class="w-10 h-5 bg-slate-200 rounded-full relative transition-colors duration-200">
+                            <div id="toggleDot" class="absolute left-1 top-1 w-3 h-3 bg-white rounded-full transition-transform duration-200"></div>
+                        </button>
+                    </div>
+
+                    <button onclick="openModal()" id="addBtn" class="hidden flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm text-sm font-medium hover:bg-blue-700 transition-colors">
+                        <i data-lucide="plus" class="w-4 h-4"></i> 거래처 등록
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <div id="dashboardView" class="view-content">
+                <div id="statsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8"></div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-4 md:p-6 border-b border-slate-100 flex flex-col xl:flex-row gap-4 justify-between items-center">
+                        <div class="flex bg-slate-100 p-1 rounded-xl w-full xl:w-auto">
+                            <button onclick="updateTab('all')" id="tab-all" class="px-6 py-2 rounded-lg text-sm font-medium transition-all bg-white text-blue-600 shadow-sm">전체</button>
+                            <button onclick="updateTab('existing')" id="tab-existing" class="px-6 py-2 rounded-lg text-sm font-medium transition-all text-slate-500">기존</button>
+                            <button onclick="updateTab('new')" id="tab-new" class="px-6 py-2 rounded-lg text-sm font-medium transition-all text-slate-500">신규</button>
+                        </div>
+                        <div class="relative w-full sm:w-64">
+                            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"></i>
+                            <input type="text" placeholder="국가 또는 바이어 검색..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" oninput="handleSearch(this.value)">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-[1000px]">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                                    <th class="px-6 py-4">국가 / 지역</th>
+                                    <th class="px-6 py-4">바이어 정보</th>
+                                    <th class="px-6 py-4 text-right">매출 (USD)</th>
+                                    <th class="px-6 py-4">인증 / 규제</th>
+                                    <th class="px-6 py-4">상태</th>
+                                    <th class="admin-only px-6 py-4 text-center hidden">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 dataTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Management View -->
+            <div id="managementView" class="view-content hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="lg:col-span-1 space-y-4">
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <i data-lucide="map-pin" class="w-4 h-4 text-blue-500"></i> 대륙별 카테고리
+                            </h3>
+                            <div class="space-y-1" id="continentList"></div>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-3">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <span id="currentFilterLabel" class="text-sm font-bold text-blue-600">지역별 현황</span>
+                                <span id="filterCount" class="text-xs text-slate-400">0개 항목</span>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse min-w-[800px]">
+                                    <thead>
+                                        <tr class="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                                            <th class="px-6 py-4">국가 / 지역</th>
+                                            <th class="px-6 py-4">바이어 정보</th>
+                                            <th class="px-6 py-4 text-right">매출</th>
+                                            <th class="admin-only px-6 py-4 text-center hidden">관리</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100 dataTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Support Center -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+                    <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="megaphone" class="w-5 h-5 text-amber-500"></i> 업무 지원 센터
+                        </h3>
+                        <button onclick="openNoticeModal()" class="admin-only hidden px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium">
+                            공지 등록
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50/50 text-slate-500 text-xs font-semibold">
+                                <tr>
+                                    <th class="px-6 py-4 w-16 text-center">No.</th>
+                                    <th class="px-6 py-4">구분</th>
+                                    <th class="px-6 py-4">제목</th>
+                                    <th class="px-6 py-4">날짜</th>
+                                    <th class="px-6 py-4">파일</th>
+                                    <th class="admin-only px-6 py-4 text-center hidden">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="noticeTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis View -->
+            <div id="analysisView" class="view-content hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-slate-800">글로벌 실적 분석</h2>
+                    <button onclick="downloadExcel()" class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700 transition-all text-sm font-medium">
+                        <i data-lucide="download" class="w-4 h-4"></i> 매출 엑셀 다운로드
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <div class="lg:col-span-1 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
+                        <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                            <i data-lucide="bar-chart-3" class="w-8 h-8"></i>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2"><span id="analysisYearLabel">2026</span>년 총 매출</h3>
+                        <p class="text-4xl font-black text-slate-900" id="analysisTotalSales">$0</p>
+                    </div>
+
+                    <div class="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold mb-4 flex items-center gap-2">
+                            <i data-lucide="pie-chart" class="w-4 h-4 text-blue-500"></i> 대륙별 매출 비중
+                        </h3>
+                        <div class="space-y-4" id="continentSalesBreakdown"></div>
+                    </div>
+
+                    <div class="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold mb-4 flex items-center gap-2">
+                            <i data-lucide="globe" class="w-4 h-4 text-emerald-500"></i> 국가별 매출 상위 비중
+                        </h3>
+                        <div class="space-y-4" id="countrySalesBreakdown"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals (Simplified for reuse) -->
+    <div id="editModal" class="fixed inset-0 bg-slate-900/60 z-[100] hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 id="modalTitle" class="text-xl font-bold text-slate-800">거래처 정보 입력</h3>
+                <button onclick="closeModal()" class="p-2 hover:bg-slate-200 rounded-full transition-colors"><i data-lucide="x"></i></button>
+            </div>
+            <form id="dataForm" class="p-6 space-y-4">
+                <input type="hidden" id="editIndex">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">국가명</label><input type="text" id="formCountry" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"></div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">대륙</label>
+                        <select id="formRegion" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <option>아시아</option><option>북아메리카</option><option>남아메리카</option><option>유럽</option><option>오세아니아</option><option>아프리카</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">도시</label><input type="text" id="formCity" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">바이어명</label><input type="text" id="formBuyer" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">매출액 (USD)</label><input type="number" id="formSales" step="0.01" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">담당자</label><input type="text" id="formContact" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">인증 정보</label><input type="text" id="formCert" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"></div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">상태</label>
+                        <select id="formStatus" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none">
+                            <option value="Existing">기존</option><option value="New">신규</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeModal()" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">취소</button>
+                    <button type="submit" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg transition-all">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Country Add Modal -->
+    <div id="countryModal" class="fixed inset-0 bg-slate-900/60 z-[105] hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="text-xl font-bold text-slate-800">국가 카테고리 추가</h3>
+                <button onclick="closeCountryModal()" class="p-2 hover:bg-slate-200 rounded-full transition-colors"><i data-lucide="x"></i></button>
+            </div>
+            <form id="countryForm" class="p-6 space-y-4">
+                <input type="hidden" id="targetContinent">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">대륙</label>
+                    <input type="text" id="displayContinent" readonly class="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">국가명</label>
+                    <input type="text" id="newCountryName" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 🇺🇸 미국">
+                </div>
+                <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all">추가하기</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notice Modal -->
+    <div id="noticeModal" class="fixed inset-0 bg-slate-900/60 z-[100] hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="text-xl font-bold text-slate-800">업무 공지 등록</h3>
+                <button onclick="closeNoticeModal()" class="p-2 hover:bg-slate-200 rounded-full transition-colors"><i data-lucide="x"></i></button>
+            </div>
+            <form id="noticeForm" class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
+                        <select id="noticeCategory" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none">
+                            <option>공지사항</option><option>매뉴얼</option><option>자료실</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">파일 이름</label>
+                        <input type="text" id="noticeFile" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" placeholder="example.pdf">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">제목</label>
+                    <input type="text" id="noticeTitle" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none">
+                </div>
+                <button type="submit" class="w-full py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-all">등록하기</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- Core Data & State ---
+        let state = {
+            isAdmin: false,
+            selectedYear: 2026,
+            currentView: 'dashboard',
+            searchTerm: '',
+            activeTab: 'all',
+            selectedContinent: null,
+            selectedCountry: null
+        };
+
+        const initialContinents = {
+            '아시아': ['태국', '베트남', '인도네시아', '필리핀', '중국', '일본'],
+            '북아메리카': ['미국', '캐나다'],
+            '남아메리카': ['브라질', '칠레'],
+            '유럽': ['프랑스', '독일', '영국'],
+            '오세아니아': ['호주', '뉴질랜드'],
+            '아프리카': ['남아공']
+        };
+
+        let db = {
+            continents: JSON.parse(localStorage.getItem('crm_continents')) || initialContinents,
+            notices: JSON.parse(localStorage.getItem('crm_notices')) || [],
+            // Records are year-based: { "2026": [...], "2027": [...] }
+            records: JSON.parse(localStorage.getItem('crm_records')) || {
+                "2026": [
+                    { region: '아시아', country: '중국', city: '상해', sales25: 25000, cert: 'NMPA', buyer: 'KC 이너벨라', contact: '양승룡', status: 'Existing' },
+                    { region: '북아메리카', country: '미국', city: 'LA', sales25: 12000, cert: 'FDA', buyer: 'RELAXATION', contact: 'Astrid', status: 'Existing' }
+                ]
+            }
+        };
+
+        // --- Init ---
+        window.onload = () => {
+            initYearSelect();
+            render();
+            lucide.createIcons();
+        };
+
+        function initYearSelect() {
+            const select = document.getElementById('yearSelect');
+            for (let y = 2020; y <= 2050; y++) {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                if (y === 2026) opt.selected = true;
+                select.appendChild(opt);
+            }
+        }
+
+        function handleYearChange(year) {
+            state.selectedYear = parseInt(year);
+            showToast(`${year}년 데이터로 전환되었습니다.`);
+            render();
+        }
+
+        function saveDB() {
+            localStorage.setItem('crm_continents', JSON.stringify(db.continents));
+            localStorage.setItem('crm_records', JSON.stringify(db.records));
+            localStorage.setItem('crm_notices', JSON.stringify(db.notices));
+            render();
+        }
+
+        // --- UI Utils ---
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+
+        function toggleAdminMode() {
+            state.isAdmin = !state.isAdmin;
+            const dot = document.getElementById('toggleDot');
+            const btn = document.getElementById('adminToggle');
+            const addBtn = document.getElementById('addBtn');
+            dot.style.transform = state.isAdmin ? 'translateX(20px)' : 'translateX(0)';
+            btn.classList.toggle('bg-blue-500', state.isAdmin);
+            btn.classList.toggle('bg-slate-200', !state.isAdmin);
+            addBtn.classList.toggle('hidden', !state.isAdmin);
+            document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !state.isAdmin));
+            showToast(state.isAdmin ? "관리자 모드 활성화" : "관리자 모드 비활성화");
+            render();
+        }
+
+        function changeView(view) {
+            state.currentView = view;
+            document.querySelectorAll('.view-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`${view}View`).classList.remove('hidden');
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('active-nav');
+                el.classList.add('inactive-nav');
+            });
+            document.getElementById(`nav-${view}`).className = "nav-item flex items-center gap-3 w-full p-3 rounded-xl active-nav font-medium transition-all";
+            render();
+        }
+
+        // --- Rendering Core ---
+        function render() {
+            const yearData = db.records[state.selectedYear] || [];
+            let filtered = [...yearData];
+
+            if (state.currentView === 'dashboard') {
+                filtered = filtered.filter(item => {
+                    const matchesSearch = item.country.includes(state.searchTerm) || item.buyer.includes(state.searchTerm);
+                    const matchesTab = state.activeTab === 'all' || (state.activeTab === 'existing' && item.status === 'Existing') || (state.activeTab === 'new' && item.status === 'New');
+                    return matchesSearch && matchesTab;
+                });
+                renderStats(filtered);
+            } else if (state.currentView === 'management') {
+                if (state.selectedCountry) filtered = filtered.filter(item => item.country === state.selectedCountry);
+                document.getElementById('currentFilterLabel').innerText = state.selectedCountry || "전체 지역";
+                document.getElementById('filterCount').innerText = `${filtered.length}개`;
+                renderContinentList();
+                renderNotices();
+            } else if (state.currentView === 'analysis') {
+                document.getElementById('analysisYearLabel').innerText = state.selectedYear;
+                renderAnalysis(yearData);
+            }
+
+            // Sync Tables
+            document.querySelectorAll('.dataTableBody').forEach(tbody => {
+                tbody.innerHTML = filtered.map((item, idx) => `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-slate-800">${item.country}</div>
+                            <div class="text-[10px] text-slate-400">${item.region} • ${item.city}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-medium">${item.buyer}</div>
+                            <div class="text-[10px] text-slate-400">${item.contact}</div>
+                        </td>
+                        <td class="px-6 py-4 text-right font-bold text-blue-600">$${item.sales25.toLocaleString()}</td>
+                        ${state.currentView === 'dashboard' ? `
+                            <td class="px-6 py-4"><span class="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100">${item.cert}</span></td>
+                            <td class="px-6 py-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${item.status === 'Existing' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${item.status === 'Existing' ? '기존' : '신규'}</span></td>
+                        ` : ''}
+                        ${state.isAdmin ? `
+                            <td class="px-6 py-4 text-center">
+                                <div class="flex justify-center gap-1">
+                                    <button onclick="openModal(${idx})" class="p-1 hover:bg-blue-50 text-blue-500 rounded"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                                    <button onclick="deleteItem(${idx})" class="p-1 hover:bg-red-50 text-red-500 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                </div>
+                            </td>
+                        ` : ''}
+                    </tr>
+                `).join('');
+            });
+            lucide.createIcons();
+        }
+
+        function renderStats(filtered) {
+            const totalSales = filtered.reduce((a, b) => a + b.sales25, 0);
+            document.getElementById('statsGrid').innerHTML = [
+                { label: '기준 연도 매출', value: `$${totalSales.toLocaleString()}`, icon: 'dollar-sign', color: 'bg-blue-50 text-blue-600' },
+                { label: '활성 거래처', value: filtered.length, icon: 'users', color: 'bg-emerald-50 text-emerald-600' },
+                { label: '신규 발굴', value: filtered.filter(i => i.status === 'New').length, icon: 'zap', color: 'bg-amber-50 text-amber-600' },
+                { label: '진출 국가 수', value: [...new Set(filtered.map(i => i.country))].length, icon: 'map', color: 'bg-purple-50 text-purple-600' }
+            ].map(s => `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex items-center gap-4 mb-2"><div class="p-2 rounded-lg ${s.color}"><i data-lucide="${s.icon}" class="w-5 h-5"></i></div><span class="text-slate-500 text-xs font-semibold">${s.label}</span></div>
+                    <p class="text-2xl font-bold text-slate-800">${s.value}</p>
+                </div>
+            `).join('');
+        }
+
+        function renderContinentList() {
+            const container = document.getElementById('continentList');
+            container.innerHTML = Object.keys(db.continents).map(cont => `
+                <div class="mb-1">
+                    <div class="flex items-center justify-between group px-2 py-1.5 hover:bg-slate-50 rounded-lg">
+                        <button onclick="state.selectedContinent = state.selectedContinent === '${cont}' ? null : '${cont}'; render();" class="flex-1 text-left text-sm font-bold text-slate-700 flex items-center justify-between">
+                            ${cont} <i data-lucide="chevron-right" class="w-3 h-3 transition-all ${state.selectedContinent === cont ? 'rotate-90' : ''}"></i>
+                        </button>
+                        <button onclick="openCountryModal('${cont}')" class="admin-only hidden p-1 text-blue-500 hover:bg-blue-50 rounded"><i data-lucide="plus" class="w-3 h-3"></i></button>
+                    </div>
+                    <div class="${state.selectedContinent === cont ? 'block' : 'hidden'} pl-4 space-y-1 mt-1">
+                        ${db.continents[cont].map(country => `
+                            <div class="flex items-center justify-between group/item">
+                                <button onclick="state.selectedCountry = '${country}'; render();" class="flex-1 text-left py-1.5 px-2 text-xs rounded-md ${state.selectedCountry === country ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-500 hover:bg-slate-50'}">${country}</button>
+                                <button onclick="deleteCountry('${cont}', '${country}')" class="admin-only hidden opacity-0 group-item-hover:opacity-100 p-1 text-red-300 hover:text-red-500"><i data-lucide="x" class="w-3 h-3"></i></button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+            if (state.isAdmin) document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+            lucide.createIcons();
+        }
+
+        function renderNotices() {
+            document.getElementById('noticeTableBody').innerHTML = db.notices.map((n, i) => `
+                <tr class="text-sm hover:bg-slate-50">
+                    <td class="px-6 py-4 text-center text-slate-400">${i + 1}</td>
+                    <td class="px-6 py-4 font-bold text-blue-600">${n.category}</td>
+                    <td class="px-6 py-4 font-medium">${n.title}</td>
+                    <td class="px-6 py-4 text-slate-400 text-xs">${n.date}</td>
+                    <td class="px-6 py-4 text-blue-500 underline text-xs cursor-pointer">${n.file || '-'}</td>
+                    ${state.isAdmin ? `<td class="px-6 py-4 text-center"><button onclick="db.notices.splice(${i},1);saveDB();" class="text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>` : ''}
+                </tr>
+            `).join('');
+        }
+
+        function renderAnalysis(data) {
+            const total = data.reduce((a, b) => a + b.sales25, 0);
+            document.getElementById('analysisTotalSales').innerText = `$${total.toLocaleString()}`;
+            
+            // Continent Breakdown
+            const contMap = {};
+            data.forEach(d => contMap[d.region] = (contMap[d.region] || 0) + d.sales25);
+            document.getElementById('continentSalesBreakdown').innerHTML = Object.entries(contMap).sort((a,b)=>b[1]-a[1]).map(([key, val]) => {
+                const per = total > 0 ? (val / total * 100).toFixed(1) : 0;
+                return `
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs font-bold"><span class="text-slate-600">${key}</span><span>$${val.toLocaleString()} (${per}%)</span></div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div class="bg-blue-500 h-full" style="width: ${per}%"></div></div>
+                    </div>
+                `;
+            }).join('');
+
+            // Country Breakdown
+            const countryMap = {};
+            data.forEach(d => countryMap[d.country] = (countryMap[d.country] || 0) + d.sales25);
+            document.getElementById('countrySalesBreakdown').innerHTML = Object.entries(countryMap).sort((a,b)=>b[1]-a[1]).slice(0, 10).map(([key, val]) => {
+                const per = total > 0 ? (val / total * 100).toFixed(1) : 0;
+                return `
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs font-bold"><span class="text-slate-600">${key}</span><span>$${val.toLocaleString()} (${per}%)</span></div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div class="bg-emerald-500 h-full" style="width: ${per}%"></div></div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- Features ---
+        function downloadExcel() {
+            const data = db.records[state.selectedYear] || [];
+            if (data.length === 0) return showToast("내보낼 데이터가 없습니다.");
+            
+            let csv = "\uFEFF연도,국가,대륙,도시,바이어,매출(USD),상태\n";
+            data.forEach(d => {
+                csv += `${state.selectedYear},${d.country},${d.region},${d.city},${d.buyer},${d.sales25},${d.status}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `Global_CRM_Sales_${state.selectedYear}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("엑셀 파일이 다운로드되었습니다.");
+        }
+
+        // --- CRUD Ops ---
+        function openModal(idx = -1) {
+            document.getElementById('dataForm').reset();
+            document.getElementById('editIndex').value = idx;
+            if (idx > -1) {
+                const item = db.records[state.selectedYear][idx];
+                document.getElementById('formCountry').value = item.country;
+                document.getElementById('formRegion').value = item.region;
+                document.getElementById('formCity').value = item.city;
+                document.getElementById('formBuyer').value = item.buyer;
+                document.getElementById('formSales').value = item.sales25;
+                document.getElementById('formCert').value = item.cert;
+                document.getElementById('formContact').value = item.contact;
+                document.getElementById('formStatus').value = item.status;
+            }
+            document.getElementById('editModal').classList.add('modal-active');
+        }
+
+        function closeModal() { document.getElementById('editModal').classList.remove('modal-active'); }
+
+        document.getElementById('dataForm').onsubmit = (e) => {
+            e.preventDefault();
+            const idx = parseInt(document.getElementById('editIndex').value);
+            const data = {
+                country: document.getElementById('formCountry').value,
+                region: document.getElementById('formRegion').value,
+                city: document.getElementById('formCity').value,
+                buyer: document.getElementById('formBuyer').value,
+                sales25: parseFloat(document.getElementById('formSales').value || 0),
+                cert: document.getElementById('formCert').value,
+                contact: document.getElementById('formContact').value,
+                status: document.getElementById('formStatus').value
+            };
+            if (!db.records[state.selectedYear]) db.records[state.selectedYear] = [];
+            if (idx > -1) db.records[state.selectedYear][idx] = data;
+            else db.records[state.selectedYear].unshift(data);
+            saveDB(); closeModal(); showToast("저장 완료");
+        };
+
+        function deleteItem(idx) {
+            if (confirm('삭제하시겠습니까?')) {
+                db.records[state.selectedYear].splice(idx, 1);
+                saveDB();
+            }
+        }
+
+        function openCountryModal(cont) {
+            document.getElementById('targetContinent').value = cont;
+            document.getElementById('displayContinent').value = cont;
+            document.getElementById('countryModal').classList.add('modal-active');
+        }
+        function closeCountryModal() { document.getElementById('countryModal').classList.remove('modal-active'); }
+        document.getElementById('countryForm').onsubmit = (e) => {
+            e.preventDefault();
+            const cont = document.getElementById('targetContinent').value;
+            const name = document.getElementById('newCountryName').value;
+            if (!db.continents[cont].includes(name)) {
+                db.continents[cont].push(name);
+                saveDB(); closeCountryModal(); showToast("국가 추가 완료");
+            }
+        };
+
+        function deleteCountry(cont, country) {
+            if (confirm('카테고리를 삭제하시겠습니까?')) {
+                db.continents[cont] = db.continents[cont].filter(c => c !== country);
+                saveDB();
+            }
+        }
+
+        function openNoticeModal() { document.getElementById('noticeModal').classList.add('modal-active'); }
+        function closeNoticeModal() { document.getElementById('noticeModal').classList.remove('modal-active'); }
+        document.getElementById('noticeForm').onsubmit = (e) => {
+            e.preventDefault();
+            db.notices.unshift({
+                category: document.getElementById('noticeCategory').value,
+                title: document.getElementById('noticeTitle').value,
+                date: new Date().toISOString().split('T')[0],
+                file: document.getElementById('noticeFile').value
+            });
+            saveDB(); closeNoticeModal(); showToast("공지 등록 완료");
+        };
+
+        function updateTab(tab) {
+            state.activeTab = tab;
+            ['all', 'existing', 'new'].forEach(t => {
+                document.getElementById(`tab-${t}`).className = (t === tab) ? "px-6 py-2 rounded-lg text-sm font-medium transition-all bg-white text-blue-600 shadow-sm" : "px-6 py-2 rounded-lg text-sm font-medium transition-all text-slate-500";
+            });
+            render();
+        }
+
+        function handleSearch(v) { state.searchTerm = v; render(); }
+    </script>
+</body>
+</html>
